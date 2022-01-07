@@ -17,12 +17,10 @@ export default class ElevatorService extends Service {
   @tracked numberOfFloors = 0;
   @tracked currentFloor = 1; // Default first floor
   @tracked movementDirection = Directions.UP; // Default direction
-  @tracked requestDirection = Directions.UP; // Default direction
+  @tracked status: 'PICKING-UP' | 'DROPPING-OFF' | undefined = undefined;
   @tracked inMotion = false;
-
   @tracked requests: Array<CachedFloor> = new TrackedArray([]);
-  @tracked upStops: { [key: number]: number } = {};
-  @tracked downStops: { [key: number]: number } = {};
+  @tracked currentRequest: CachedFloor | undefined = undefined;
 
   maximumNumberOfPeople = 100;
   millisecondsBetweenMovement = 1000;
@@ -39,10 +37,7 @@ export default class ElevatorService extends Service {
   }
 
   get isEmpty() {
-    return (
-      Object.keys(this.upStops).length + Object.keys(this.downStops).length ===
-      0
-    );
+    return this.currentRequest === undefined;
   }
 
   @action
@@ -74,19 +69,6 @@ export default class ElevatorService extends Service {
 
     // Decide which direction to move, if not yet in motion
     if (!this.inMotion) {
-      // Get the next direction to go based on request FIFO
-      const nextRequest = this.requests[0];
-
-      this.movementDirection =
-        nextRequest.floor === this.currentFloor
-          ? nextRequest.requestedFloor > this.currentFloor
-            ? Directions.UP
-            : Directions.DOWN
-          : nextRequest.floor > this.currentFloor
-          ? Directions.UP
-          : Directions.DOWN;
-      this.requestDirection = nextRequest.direction;
-
       this.move();
     }
   }
@@ -99,113 +81,58 @@ export default class ElevatorService extends Service {
 
     this.inMotion = true;
 
-    const farthestFloorAway = this.getFarthestFloor();
+    // Do we currently have a request or do we need a new one?
+    this.currentRequest = this.currentRequest ?? this.requests[0]!;
 
-    this.arrivedAtFloor(this.currentFloor);
+    if (this.status === undefined || this.status === 'PICKING-UP') {
+      if (this.isOnCorrectFloor(this.currentRequest?.floor)) {
+        this.movementDirection = this.getMovementDirection(
+          this.currentFloor,
+          this.currentRequest.requestedFloor
+        );
 
-    if (!farthestFloorAway || farthestFloorAway === this.currentFloor) {
-      setTimeout(() => this.move(), this.millisecondsBetweenMovement);
-    } else {
-      // Set new floor, with boundary conditions
-      this.currentFloor = Math.min(
-        Math.max(
-          1,
-          this.currentFloor +
-            (this.movementDirection === Directions.UP ? 1 : -1)
-        ),
-        this.numberOfFloors
-      );
+        this.requests.shift();
+
+        // pick up passenger here and switch status
+        this.status = 'DROPPING-OFF';
+      } else {
+        this.movementDirection = this.getMovementDirection(
+          this.currentFloor,
+          this.currentRequest.floor
+        );
+        this.currentFloor = this.moveOneSpace();
+      }
+    } else if (this.status === 'DROPPING-OFF') {
+      if (this.isOnCorrectFloor(this.currentRequest?.requestedFloor)) {
+        //release the hounds
+        this.currentRequest = undefined;
+
+        this.status = 'PICKING-UP';
+      } else {
+        this.movementDirection = this.getMovementDirection(
+          this.currentFloor,
+          this.currentRequest.requestedFloor
+        );
+
+        this.currentFloor = this.moveOneSpace();
+      }
     }
 
     setTimeout(() => this.move(), this.millisecondsBetweenMovement);
   }
 
-  private getFarthestFloor(): number | undefined {
-    let floor = undefined;
-
-    // if we have passengers, we know the direction
-    if (!this.isEmpty) {
-      const map =
-        this.movementDirection === Directions.UP
-          ? this.upStops
-          : this.downStops;
-
-      for (const key in map) {
-        const int = parseInt(key);
-        if (this.movementDirection === Directions.UP) {
-          floor = floor && floor > int ? floor : int;
-        } else {
-          floor = floor && floor < int ? floor : int;
-        }
-      }
-    } else {
-      const obj = this.requests.reduce((prev, current) => {
-        if (this.movementDirection === Directions.UP) {
-          return prev.floor > current.floor ? prev : current;
-        } else {
-          return prev.floor < current.floor ? prev : current;
-        }
-      });
-      // If we're already on the floor picking up passengers, switch to the requested floor
-      floor = this.currentFloor === obj.floor ? obj.requestedFloor : obj.floor;
-    }
-
-    if (!floor) {
-      this.movementDirection =
-        this.movementDirection === Directions.UP
-          ? Directions.DOWN
-          : Directions.UP;
-      floor = this.getFarthestFloor();
-    }
-
-    return floor;
+  getMovementDirection(currentFloor: number, desiredFloor: number): Directions {
+    return currentFloor > desiredFloor ? Directions.DOWN : Directions.UP;
   }
 
-  private arrivedAtFloor(floor: number) {
-    // first let all of the passengers on the elevator depart
-    delete this.upStops[floor];
-    delete this.downStops[floor];
-
-    // grab any passengers waiting on this floor
-    const passengersAboarding: Array<CachedFloor> = [];
-    for (let i = 0; i < this.requests.length; i++) {
-      const request = this.requests[i];
-      if (
-        request.direction === this.requestDirection &&
-        request.floor === floor
-      ) {
-        this.requests.removeAt(i, 1);
-        passengersAboarding.push(request);
-      }
-    }
-    // eslint-disable-next-line no-self-assign
-    this.requests = this.requests;
-
-    // increment the upStops
-    passengersAboarding.forEach((passenger) => {
-      if (this.requestDirection === Directions.UP) {
-        this.incrementMap(this.upStops, passenger.requestedFloor);
-      } else {
-        this.incrementMap(this.downStops, passenger.requestedFloor);
-      }
-    });
-
-    // check for any new passengers that chose the same floor since we're already here
-    delete this.upStops[floor];
-    delete this.downStops[floor];
-
-    // eslint-disable-next-line no-self-assign
-    this.upStops = this.upStops;
-    // eslint-disable-next-line no-self-assign
-    this.downStops = this.downStops;
+  isOnCorrectFloor(desiredFloor: number): boolean {
+    return this.currentFloor === desiredFloor;
   }
 
-  private incrementMap(map: any, key: number) {
-    const val = map[key] === undefined ? 1 : map[key] + 1;
-    map[key] = val;
-
-    // eslint-disable-next-line no-self-assign
-    map = map;
+  moveOneSpace() {
+    return (
+      this.currentFloor + (this.movementDirection === Directions.UP ? 1 : -1)
+    );
   }
 }
 

@@ -1,14 +1,18 @@
 <div>
-  <p class='text-sm uppercase font-semibold text-gray-400'>Floor Call Button</p>
+  <label
+    for='call-button-input'
+    class='text-sm uppercase font-semibold text-gray-400'
+  >Floor Call Button</label>
   <Input
     @type='number'
     @value={{this.requestedFloor}}
+    id='call-button-input'
     max={{this.elevator.numberOfFloors}}
     min={{1}}
     placeholder='Enter a floor'
     class='rounded px-2 py-1 w-full border
-      {{if
-        (not this.requestedFloor)
+      {{unless
+        this.requestedFloor
         "border-blue-700 bg-gray-100"
         "border-gray-400 bg-gray-100 hover:bg-gray-200"
       }}

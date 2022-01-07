@@ -3,20 +3,10 @@
 
   <ul class=''>
     {{#if this.passengers}}
-      {{#each-in this.passengers as |floor count|}}
-        <!-- Setting up for I18N -->
-        {{#if (eq count 1)}}
-          <li>{{count}}
-            Person wants to go to floor
-            {{floor}}</li>
-        {{else}}
-          <li>{{count}}
-            People want to go to floor
-            {{floor}}</li>
-        {{/if}}
-      {{else}}
-        <li>No one in the elevator</li>
-      {{/each-in}}
+      <li>Person wants to go to floor
+        {{this.passengers.requestedFloor}}</li>
+    {{else}}
+      <li>No one in the elevator</li>
     {{/if}}
   </ul>
 </div>
