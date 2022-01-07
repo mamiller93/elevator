@@ -1,3 +1,10 @@
 <div class='my-10' {{on-key '_all' this.triggerOnAlphaNumeric}}>
-
+  <div class='flex justify-between'>
+    <Elevator />
+    <ElevatorButtons />
+  </div>
+  <div class='flex'>
+    <OnFloorQueue class='w-1/2' />
+    <InElevatorQueue class='w-1/2' />
+  </div>
 </div>

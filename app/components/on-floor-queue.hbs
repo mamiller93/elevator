@@ -1,0 +1,19 @@
+<div ...attributes>
+
+  <p class='text-sm uppercase font-semibold text-gray-400'>On Floor Queue</p>
+  <ul class=''>
+    {{#if this.elevator.hasEmptyRequests}}
+      <li>No one is waiting</li>
+    {{else}}
+
+      {{#each this.floorRequests as |request|}}
+        <li>Person on floor
+          {{request.floor}}
+          wants to go
+          {{lowercase request.direction}}
+        </li>
+      {{/each}}
+    {{/if}}
+  </ul>
+
+</div>
